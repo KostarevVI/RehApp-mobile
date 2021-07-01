@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">Rehapp App</string>
+    <string name="logoString">Rehapp Logo</string>
+    <string name="loginLabel">Login</string>
+</resources>
