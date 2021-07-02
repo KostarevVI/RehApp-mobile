@@ -8,10 +8,13 @@
 
     <ImageView
         android:id="@+id/imageView3"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="492dp"
+        android:layout_height="845dp"
         android:contentDescription="background_image"
-        app:srcCompat="@drawable/background" />
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:srcCompat="@drawable/background"
+        tools:layout_editor_absoluteY="-114dp" />
 
     <Button
         android:id="@+id/scan_button"

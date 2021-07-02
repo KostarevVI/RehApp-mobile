@@ -32,7 +32,7 @@ import java.util.*
 
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
-lateinit var bluetoothGatt: BluetoothGatt
+private var bluetoothGatt: BluetoothGatt? = null
 
 //ТАм есть еще onMtuChanged(), пока скипнул, мб и не понадобится
 class ActivityBle : AppCompatActivity() {
@@ -43,26 +43,26 @@ class ActivityBle : AppCompatActivity() {
 
     lateinit var pref: SharedPreferences
 
-    private fun sendTraining(bluetoothGatt: BluetoothGatt) {
+    private fun sendTraining(): Boolean {
         if (bluetoothGatt == null) {
             Log.e(ContentValues.TAG, "lost connection")
-            return Unit
+            return false
         }
-        val Service: BluetoothGattService = bluetoothGatt.getService(UUID.fromString("6fff889d-c509-408f-9284-5aeefada3f4d"))
+        val Service: BluetoothGattService = bluetoothGatt!!.getService(UUID.fromString("6fff889d-c509-408f-9284-5aeefada3f4d"))
         if (Service == null) {
             Log.e(ContentValues.TAG, "service not found!")
-            return Unit
+            return false
         }
         val charac = Service
             .getCharacteristic(UUID.fromString("09aa0822-08df-42af-913c-428d0355e9b2"))
         if (charac == null) {
             Log.e(ContentValues.TAG, "char not found!")
-            return Unit
+            return false
         }
         val value = ByteArray(1)
-        value[0] = "1".toByte()
+        value[0] = 1.toByte()
         charac.value = value
-        return writeCharacteristicq(charac, charac.value)
+        return bluetoothGatt!!.writeCharacteristic(charac)
     }
 
 
@@ -80,7 +80,7 @@ class ActivityBle : AppCompatActivity() {
         return properties and property != 0
     }
 
-    fun writeCharacteristicq(characteristic: BluetoothGattCharacteristic, payload: ByteArray) {
+    fun writeCharacteristic(characteristic: BluetoothGattCharacteristic, payload: ByteArray) {
         val writeType = when {
             characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
             characteristic.isWritableWithoutResponse() -> {
@@ -174,7 +174,7 @@ class ActivityBle : AppCompatActivity() {
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    bluetoothGatt = gatt
+                    val bluetoothGatt = gatt
                     Handler(Looper.getMainLooper()).post {
                         bluetoothGatt?.discoverServices()
                     }
@@ -257,7 +257,7 @@ class ActivityBle : AppCompatActivity() {
         fetch_button.setOnClickListener { fetchTraining() }
 
         val send_button: Button = findViewById(R.id.send_button)
-        send_button.setOnClickListener { sendTraining(bluetoothGatt) }
+        send_button.setOnClickListener { sendTraining() }
 
         val scan_button: Button = findViewById(R.id.scan_button)
         scan_button.setOnClickListener {
