@@ -6,13 +6,19 @@ import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
-import android.content.*
+import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
-import android.os.*
-import androidx.appcompat.app.AppCompatActivity
+import android.os.Build
+import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.widget.Button
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
@@ -22,9 +28,11 @@ import retrofit2.Call
 import retrofit2.Response
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
+import java.util.*
 
 private const val LOCATION_PERMISSION_REQUEST_CODE = 2
 private const val ENABLE_BLUETOOTH_REQUEST_CODE = 1
+lateinit var bluetoothGatt: BluetoothGatt
 
 //ТАм есть еще onMtuChanged(), пока скипнул, мб и не понадобится
 class ActivityBle : AppCompatActivity() {
@@ -34,6 +42,59 @@ class ActivityBle : AppCompatActivity() {
         .build()
 
     lateinit var pref: SharedPreferences
+
+    private fun sendTraining(bluetoothGatt: BluetoothGatt) {
+        if (bluetoothGatt == null) {
+            Log.e(ContentValues.TAG, "lost connection")
+            return Unit
+        }
+        val Service: BluetoothGattService = bluetoothGatt.getService(UUID.fromString("6fff889d-c509-408f-9284-5aeefada3f4d"))
+        if (Service == null) {
+            Log.e(ContentValues.TAG, "service not found!")
+            return Unit
+        }
+        val charac = Service
+            .getCharacteristic(UUID.fromString("09aa0822-08df-42af-913c-428d0355e9b2"))
+        if (charac == null) {
+            Log.e(ContentValues.TAG, "char not found!")
+            return Unit
+        }
+        val value = ByteArray(1)
+        value[0] = "1".toByte()
+        charac.value = value
+        return writeCharacteristicq(charac, charac.value)
+    }
+
+
+
+    fun BluetoothGattCharacteristic.isReadable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_READ)
+
+    fun BluetoothGattCharacteristic.isWritable(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE)
+
+    fun BluetoothGattCharacteristic.isWritableWithoutResponse(): Boolean =
+        containsProperty(BluetoothGattCharacteristic.PROPERTY_WRITE_NO_RESPONSE)
+
+    fun BluetoothGattCharacteristic.containsProperty(property: Int): Boolean {
+        return properties and property != 0
+    }
+
+    fun writeCharacteristicq(characteristic: BluetoothGattCharacteristic, payload: ByteArray) {
+        val writeType = when {
+            characteristic.isWritable() -> BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            characteristic.isWritableWithoutResponse() -> {
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            }
+            else -> error("Characteristic ${characteristic.uuid} cannot be written to")
+        }
+
+        bluetoothGatt?.let { gatt ->
+            characteristic.writeType = writeType
+            characteristic.value = payload
+            gatt.writeCharacteristic(characteristic)
+        } ?: error("Not connected to a BLE device!")
+    }
 
     private fun fetchTraining() {
         val serviceAPI = mRetrofit.create(RehServerApi::class.java)
@@ -59,7 +120,19 @@ class ActivityBle : AppCompatActivity() {
                     val getTrainingReport = response.body() as GetTrainingReport
                     val trainingData = getTrainingReport.data as TrainingData
                     if (getTrainingReport.status == "200") {
-
+                        Toast.makeText(
+                            ActivityBle.bleAct.applicationContext,
+                            "Got training for you!",
+                            Toast.LENGTH_LONG
+                        )
+                            .show()
+                    } else if (getTrainingReport.status == "204") {
+                        Toast.makeText(
+                            ActivityBle.bleAct.applicationContext,
+                            "No trainings",
+                            Toast.LENGTH_LONG
+                        )
+                            .show()
                     } else {
                         Toast.makeText(
                             ActivityBle.bleAct.applicationContext,
@@ -72,7 +145,7 @@ class ActivityBle : AppCompatActivity() {
                 } else {
                     Toast.makeText(
                         ActivityBle.bleAct.applicationContext,
-                        response.errorBody().toString(),
+                        "Error(",
                         Toast.LENGTH_LONG
                     )
                         .show()
@@ -89,7 +162,7 @@ class ActivityBle : AppCompatActivity() {
             }
             with(result.device) {
                 Log.w("ScanResultAdapter", "Connecting to $address")
-                connectGatt(this@ActivityBle, false, gattCallback)
+                bluetoothGatt = connectGatt(this@ActivityBle, false, gattCallback)
             }
 
         }
@@ -101,7 +174,7 @@ class ActivityBle : AppCompatActivity() {
 
             if (status == BluetoothGatt.GATT_SUCCESS) {
                 if (newState == BluetoothProfile.STATE_CONNECTED) {
-                    val bluetoothGatt = gatt
+                    bluetoothGatt = gatt
                     Handler(Looper.getMainLooper()).post {
                         bluetoothGatt?.discoverServices()
                     }
@@ -179,6 +252,12 @@ class ActivityBle : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_ble)
+
+        val fetch_button: Button = findViewById(R.id.fetch_button)
+        fetch_button.setOnClickListener { fetchTraining() }
+
+        val send_button: Button = findViewById(R.id.send_button)
+        send_button.setOnClickListener { sendTraining(bluetoothGatt) }
 
         val scan_button: Button = findViewById(R.id.scan_button)
         scan_button.setOnClickListener {
